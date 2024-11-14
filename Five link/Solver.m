@@ -2,11 +2,9 @@
 % filename:         Solver.m
 % author(s):        Niek van Rossem
 % Creation date:    23-10-2024
-%%-----------------------------------------------------------------------%%
-
-%% Documentation
+% Documentation
 % -
-%
+%%-----------------------------------------------------------------------%%
 
 %% Prepare workspace
 
@@ -34,19 +32,21 @@ Settings.Animation = "on";
 [Car, PUP] = DUT25_PUP(Settings);
 
 % find loaded radius
-RL = abs(PUP.r_WC_CH(3) - PUP.r_CP_CH(3));
+Car.RL = abs(PUP.r_WC_O(3) - PUP.r_CP_O(3));
 
 % create state vector
 r = vertcat( ...
-    PUP.r_FUB, ...
-    PUP.r_FLB, ...
-    PUP.r_FUIF, ...
-    PUP.r_FUIR, ...
-    PUP.r_FLIF, ...
-    PUP.r_FLIR, ...
-    PUP.r_FOT, ...
-    PUP.r_FIT, ...
-    PUP.r_CP_CH, ...
+    PUP.r_P1o, ...
+    PUP.r_P2o, ...
+    PUP.r_P3o, ...
+    PUP.r_P4o, ...
+    PUP.r_P5o, ...
+    PUP.r_P1i, ...
+    PUP.r_P2i, ...
+    PUP.r_P3i, ...
+    PUP.r_P4i, ...
+    PUP.r_P5i, ...
+    PUP.r_CP_O, ...
     dTravel);
 
 % set solver options
@@ -55,122 +55,125 @@ opts = odeset('RelTol', Settings.RelTol, 'AbsTol', Settings.AbsTol, 'MaxStep', S
 % solve for wheel travel sweep
 [t, r_out] = ode45(@FiveLink, [0 200], r, opts);
 
-VariableNames = [
-    "r_FUB_x", "r_FUB_y", "r_FUB_z", ...
-    "r_FLB_x", "r_FLB_y", "r_FLB_z", ...
-    "r_FUIF_x", "r_FUIF_y", "r_FUIF_z", ...
-    "r_FUIR_x", "r_FUIR_y", "r_FUIR_z", ...
-    "r_FLIF_x", "r_FLIF_y", "r_FLIF_z", ...
-    "r_FLIR_x", "r_FLIR_y", "r_FLIR_z", ...
-    "r_FOT_x", "r_FOT_y", "r_FOT_z", ...
-    "r_FIT_x", "r_FIT_y", "r_FIT_z", ...
-    "r_CP_CH_x", "r_CP_CH_y", "r_CP_CH_z", ...
+Settings.VariableNames = [
+    "t", ...
+    "r_P1o_x", "r_P1o_y", "r_P1o_z", ...
+    "r_P2o_x", "r_P2o_y", "r_P2o_z", ...
+    "r_P3o_x", "r_P3o_y", "r_P3o_z", ...
+    "r_P4o_x", "r_P4o_y", "r_P4o_z", ...
+    "r_P5o_x", "r_P5o_y", "r_P5o_z", ...
+    "r_P1i_x", "r_P1i_y", "r_P1i_z", ...
+    "r_P2i_x", "r_P2i_y", "r_P2i_z", ...
+    "r_P3i_x", "r_P3i_y", "r_P3i_z", ...
+    "r_P4i_x", "r_P4i_y", "r_P4i_z", ...
+    "r_P5i_x", "r_P5i_y", "r_P5i_z", ...
+    "r_CP_O_x", "r_CP_O_y", "r_CP_O_z", ...
     "dTravel"];
 
 % convert to table
-output = array2table(r_out, "VariableNames", VariableNames);
+output = array2table([t, r_out], "VariableNames", Settings.VariableNames);
+output.dTravel = [];
 
 %% extract generalised speeds
 
-% allocate space
-q = zeros(numel(t),6);
+% allocate space for generalised speeds
+q_out = zeros(numel(output.t),6);
 
-% loop over
-for i = 1:numel(t)
-    [~, q(i,:)] = FiveLink(t(i), transpose(r_out(i,:)));
+% loop over all time steps
+for i = 1:numel(output.t)
+    [~, q_out(i,:)] = FiveLink(output.t(i), transpose(r_out(i,:)));
 end
 
+% generalised DoF
+output.dWheelbase  = q_out(:,1);
+output.dTrack      = q_out(:,2);
+output.dTravel     = q_out(:,6);
+output.dCamber     = q_out(:,3);
+output.dSpin       = q_out(:,4);
+output.dToe        = q_out(:,5);
+
+clear i; clear r_out; clear q_out; clear t; clear dTravel;
+
 % extract actual track width
-Track = 2*output.r_CP_CH_y;
+output.Track = 2*output.r_CP_O_y;
 
 % extract wheel travel
-Travel = output.r_CP_CH_z;
+output.Travel = output.r_CP_O_z;
 
 % calculate equivalent roll angle
-Roll   = atan(Travel./(0.5*Track));
+output.Roll   = 180/pi*atan(output.Travel./(0.5*output.Track));
 
 % calculate ride height
-RideHeight = Car.RideHeight_0 - Travel;
-
-output = addvars(output, q(:,1), q(:,2), 'After','r_CP_CH_z');
-output = addvars(output, q(:,3), q(:,4), q(:,5), 'After','dTravel');
-
-% generalised DoF
-dWheelbase  = q(:,1);
-dTrack      = q(:,2);
-dCamber     = q(:,3);
-dSpin       = q(:,4);
-dToe        = q(:,5);
-dTravel     = q(:,6);
+output.RideHeight = Car.RH - output.Travel;
 
 % Suspension params
-RollCentre  = Track./2.*(dTrack./dTravel);          % mm
-CamberGainB = -dCamber./dTravel*180/pi;             % deg/mm
-BumpSteer   = dToe./dTravel*180/pi;                 % deg/mm
-CasterGain  = -dSpin./dTravel*180/pi;               % deg/mm
-AntiRoll    = atan(dTrack./dTravel)*180/pi;         % deg
-AntiPitch   = atan(-dWheelbase./dTravel)*180/pi;    % deg
-LatGrad     = dTrack./dTravel;                      % mm/mm
-LongGrad    = dWheelbase./dTravel;                  % mm/mm
-CamberGainR = CamberGainB.*0.5.*Track.*sind(1)+1;   % deg/deg
+output.RollCentre  = output.Track./2.*(output.dTrack./output.dTravel);          % mm
+output.CamberGainB = -output.dCamber./output.dTravel*180/pi;             % deg/mm
+output.BumpSteer   = output.dToe./output.dTravel*180/pi;                 % deg/mm
+output.CasterGain  = -output.dSpin./output.dTravel*180/pi;               % deg/mm
+output.AntiRoll    = atan(output.dTrack./output.dTravel)*180/pi;         % deg
+output.AntiPitch   = atan(-output.dWheelbase./output.dTravel)*180/pi;    % deg
+output.LatGrad     = output.dTrack./output.dTravel;                      % mm/mm
+output.LongGrad    = output.dWheelbase./output.dTravel;                  % mm/mm
+output.CamberGainR = output.CamberGainB.*0.5.*output.Track.*sind(1)+1;   % deg/deg
 
 % integrate to find camber and toe curves
-Camber = cumtrapz(t, -dCamber);
-Toe    = cumtrapz(t, dToe);
+output.Camber = cumtrapz(output.t, -output.dCamber*180/pi);
+output.Toe    = cumtrapz(output.t, output.dToe*180/pi);
 
 %% Plot output characteristics
 
 % camber
-figure("Name", "Camber characteristic");
+figure(1);%"Name", "Camber characteristic");
 subplot(1,2,1); hold all;
     title('Camber curve');
-    plot(Camber, Travel, '.', 'MarkerSize', 2);
+    plot(output.Camber, output.Travel, '.', 'MarkerSize', 2);
     xlabel('Camber angle (deg)');
     ylabel('Travel (mm)');
     xline(0, 'k-'); yline(0, 'k-');
-    xlim([-0.1 0.1]); grid minor;
+    xlim([-5 5]); grid minor;
 subplot(1,2,2); hold all;
     title('Camber gain');
-    plot(CamberGainB, Travel, '.', 'MarkerSize', 2);
+    plot(output.CamberGainB, output.Travel, '.', 'MarkerSize', 2);
     xlabel('Camber gain (deg/mm)');
     ylabel('Travel (mm)');
     xline(0, 'k-'); yline(0, 'k-');
     xlim([-0.1 -0.05]);  grid minor;
 
 % bump steer
-figure("Name", "Bumpsteer characteristic");
+figure(2);%"Name", "Bumpsteer characteristic");
 subplot(1,2,1); hold all;
     title('Bumpsteer curve');
-    plot(Toe, Travel, '.', 'MarkerSize', 2);
+    plot(output.Toe, output.Travel, '.', 'MarkerSize', 2);
     xlabel('Toe angle (deg)');
     ylabel('Travel (mm)');
     xline(0, 'k-'); yline(0, 'k-');
-    xlim([-0.02 0.02]); grid minor;
+    xlim([-0.5 0.5]); grid minor;
     annotation('textarrow', 0.5*[0.85 0.9],[0.4 0.4], 'String', 'toe in');
     annotation('textarrow', 0.5*[0.35 0.3],[0.4 0.4], 'String', 'toe out');
 subplot(1,2,2); hold all;
     title('Toe gain');
-    plot(BumpSteer, Travel, '.', 'MarkerSize', 2);
+    plot(output.BumpSteer, output.Travel, '.', 'MarkerSize', 2);
     xlabel('Toe gain (deg/mm)');
     ylabel('Travel (mm)');
     xline(0, 'k-'); yline(0, 'k-');
     xlim([-15e-3 15e-3]); grid minor;
 
-figure("Name", "Roll centre height"); hold all; grid minor;
+figure(3);%"Name", "Roll centre height"); hold all; grid minor;
 title('Roll centre curve');
-plot(RideHeight, RollCentre, '.', 'MarkerSize', 2);
+plot(output.RideHeight, output.RollCentre, '.', 'MarkerSize', 2);
 xlabel('Ride height (mm)');
 ylabel('Roll centre height (mm)');
 
-figure("Name", "Anti pitch angle");
+figure(4);%"Name", "Anti pitch angle");
 subplot(1,2,1); hold all; grid minor;
     title('Lateral n-line angle curve');
-    plot(RideHeight, AntiRoll, '.', 'MarkerSize', 2);
+    plot(output.RideHeight, output.AntiRoll, '.', 'MarkerSize', 2);
     xlabel('Ride height (mm)');
     ylabel('Anti-roll angle (deg)');
 subplot(1,2,2); hold all; grid minor;
     title('Longitudinal n-line angle curve');
-    plot(RideHeight, AntiPitch, '.', 'MarkerSize', 2);
+    plot(output.RideHeight, output.AntiPitch, '.', 'MarkerSize', 2);
     xlabel('Ride height (mm)');
     ylabel('Anti-pitch angle (deg)');
 
@@ -178,10 +181,10 @@ subplot(1,2,2); hold all; grid minor;
 if Settings.Animation == "on"
     dynamicData = r_out(1,:);
     
-    new_FUB = dynamicData(1:3);
-    new_FLB = dynamicData(4:6);
-    new_FOT = dynamicData(19:21);
-    new_CP_CH = dynamicData(25:27);
+    new_FUB = [output.r_P1o_x, output.r_P1o_y, output.r_P1o_z];
+    new_FLB = [output.r_P3o_x, output.r_P3o_y, output.r_P3o_z];
+    new_FOT = [output.r_P5o_x, output.r_P5o_y, output.r_P5o_z];
+    new_CP_O = [output.r_CP_O_x, output.r_CP_O_y, output.r_CP_O_z];
     
     f = figure("Name", "Animation"); clf; view(90,0); hold all;
     box on; grid minor; axis equal;
@@ -192,7 +195,7 @@ if Settings.Animation == "on"
     h3 = plot3([new_FLB(1) PUP.r_FLIF(1)], [new_FLB(2) PUP.r_FLIF(2)], [new_FLB(3) PUP.r_FLIF(3)], 'o-', 'Color', 'red');
     h4 = plot3([new_FLB(1) PUP.r_FLIR(1)], [new_FLB(2) PUP.r_FLIR(2)], [new_FLB(3) PUP.r_FLIR(3)], 'o-', 'Color', 'red');
     h5 = plot3([new_FOT(1) PUP.r_FIT(1)], [new_FOT(2) PUP.r_FIT(2)], [new_FOT(3) PUP.r_FIT(3)], 'o-', 'Color', 'red');
-    h6 = plot3(new_CP_CH(1), new_CP_CH(2), new_CP_CH(3), 'ro');
+    h6 = plot3(new_CP_O(1), new_CP_O(2), new_CP_O(3), 'ro');
     
     for i = 1:length(r_out(:,1))
     
@@ -201,15 +204,15 @@ if Settings.Animation == "on"
         new_FUB = dynamicData(1:3);
         new_FLB = dynamicData(4:6);
         new_FOT = dynamicData(19:21);
-        new_CP_CH = dynamicData(25:27);
+        new_CP_O = dynamicData(25:27);
     
         % update data
-        set(h1, 'XData', [new_FUB(1) PUP.r_FUIF(1)], 'YData', [new_FUB(2) PUP.r_FUIF(2)], 'ZData', [new_FUB(3) PUP.r_FUIF(3)]);
-        set(h2, 'XData', [new_FUB(1) PUP.r_FUIR(1)], 'YData', [new_FUB(2) PUP.r_FUIR(2)], 'ZData', [new_FUB(3) PUP.r_FUIR(3)]);
-        set(h3, 'XData', [new_FLB(1) PUP.r_FLIF(1)], 'YData', [new_FLB(2) PUP.r_FLIF(2)], 'ZData', [new_FLB(3) PUP.r_FLIF(3)]);
-        set(h4, 'XData', [new_FLB(1) PUP.r_FLIR(1)], 'YData', [new_FLB(2) PUP.r_FLIR(2)], 'ZData', [new_FLB(3) PUP.r_FLIR(3)]);
-        set(h5, 'XData', [new_FOT(1) PUP.r_FIT(1)], 'YData', [new_FOT(2) PUP.r_FIT(2)], 'ZData', [new_FOT(3) PUP.r_FIT(3)]);
-        set(h6, 'XData', new_CP_CH(1), 'YData', new_CP_CH(2), 'ZData', new_CP_CH(3));
+        set(h1, 'XData', [new_FUB(1) PUP.r_P1i(1)], 'YData', [new_FUB(2) PUP.r_FUIF(2)], 'ZData', [new_FUB(3) PUP.r_FUIF(3)]);
+        set(h2, 'XData', [new_FUB(1) PUP.r_P2i(1)], 'YData', [new_FUB(2) PUP.r_FUIR(2)], 'ZData', [new_FUB(3) PUP.r_FUIR(3)]);
+        set(h3, 'XData', [new_FLB(1) PUP.r_P3i(1)], 'YData', [new_FLB(2) PUP.r_FLIF(2)], 'ZData', [new_FLB(3) PUP.r_FLIF(3)]);
+        set(h4, 'XData', [new_FLB(1) PUP.r_P4i(1)], 'YData', [new_FLB(2) PUP.r_FLIR(2)], 'ZData', [new_FLB(3) PUP.r_FLIR(3)]);
+        set(h5, 'XData', [new_FOT(1) PUP.r_P5i(1)], 'YData', [new_FOT(2) PUP.r_FIT(2)], 'ZData', [new_FOT(3) PUP.r_FIT(3)]);
+        set(h6, 'XData', new_CP_O(1), 'YData', new_CP_O(2), 'ZData', new_CP_O(3));
 
         % hold for some time for correct animation speed
         pause(Settings.MaxStep/1e2);

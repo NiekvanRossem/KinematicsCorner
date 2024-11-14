@@ -1,36 +1,38 @@
 function [drdt, q] = FiveLink(t, r)
     
     % extract PUP position vectors
-    r_FUB   = r(1:3);
-    r_FLB   = r(4:6);
-    r_FUIF  = r(7:9);
-    r_FUIR  = r(10:12);
-    r_FLIF  = r(13:15);
-    r_FLIR  = r(16:18);
-    r_FOT   = r(19:21);
-    r_FIT   = r(22:24);
-    r_CP_CH = r(25:27);
-    dTravel = r(28);
+    r_P1o   = r(1:3);
+    r_P2o   = r(4:6);
+    r_P3o   = r(7:9);
+    r_P4o   = r(10:12);
+    r_P5o   = r(13:15);
+    r_P1i   = r(16:18);
+    r_P2i   = r(19:21);
+    r_P3i   = r(22:24);
+    r_P4i   = r(25:27);
+    r_P5i   = r(28:30);
+    r_CP_O  = r(31:33);
+    dTravel = r(34);
 
     % 1st link (FUF)
-    r_P1_CH = r_FUB - r_FUIF;
-    r_P1_CP = r_FUB - r_CP_CH;
+    r_P1_CH = r_P1o - r_P1i;    % from chassis
+    r_P1_CP = r_P1o - r_CP_O;   % from wheel centre
     
     % 2nd link (FUR)
-    r_P2_CH = r_FUB - r_FUIR;
-    r_P2_CP = r_FUB - r_CP_CH;
+    r_P2_CH = r_P2o - r_P2i;
+    r_P2_CP = r_P2o - r_CP_O;
     
     % 3rd link (FLF)
-    r_P3_CH = r_FLB - r_FLIF;
-    r_P3_CP = r_FLB - r_CP_CH;
+    r_P3_CH = r_P3o - r_P3i;
+    r_P3_CP = r_P3o - r_CP_O;
     
     % 4th link (FLR)
-    r_P4_CH = r_FLB - r_FLIR;
-    r_P4_CP = r_FLB - r_CP_CH;
+    r_P4_CH = r_P4o - r_P4i;
+    r_P4_CP = r_P4o - r_CP_O;
     
     % 5th link (TIE)
-    r_P5_CH = r_FOT - r_FIT;
-    r_P5_CP = r_FOT - r_CP_CH;
+    r_P5_CH = r_P5o - r_P5i;
+    r_P5_CP = r_P5o - r_CP_O;
 
     %% Convert to matrix form and solve
     
@@ -61,8 +63,6 @@ function [drdt, q] = FiveLink(t, r)
     dSpin       = q(4);
     dToe        = q(5);
     
-    disp(["Cambergain: ", -dCamber/dTravel*180/pi]);
-
     %% Calculate velocity vectors
     
     % angular velocity
@@ -79,7 +79,7 @@ function [drdt, q] = FiveLink(t, r)
     v_P5 = v_CP + cross(w_A, r_P5_CP);
 
     % find derivative of state vector
-    drdt = vertcat(v_P1, v_P3, zeros(12,1), v_P5, zeros(3,1), v_CP, 0);
+    drdt = vertcat(v_P1, v_P2, v_P3, v_P4, v_P5, zeros(15,1), v_CP, 0);
 
     q = [q; dTravel];
     
