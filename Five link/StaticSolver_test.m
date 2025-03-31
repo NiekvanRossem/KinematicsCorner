@@ -5,14 +5,12 @@ dTravel = 1;
 %% PUPs from Suh's paper
 
 % contact patch
-r_CP    = [ -54.137;     718.938;   -319.000];
+r_CP_CH    = [ -54.137;     718.938;   -319.000];
 
-Track = r_CP(2);
+Track = r_CP_CH(2);
 
 % wheel centre
-r_WC    = [ -54.137;     718.938;    -45.000];
-
-RL = abs(r_WC(3)-r_CP(3));
+r_WC_CH    = [ -54.137;     718.938;    -45.000];
 
 % suspension PUPs
 r_FUB   = [ -49.496;     603.805;     71.853];
@@ -116,7 +114,6 @@ plot3([r_FLB(1) r_FLIF(1)], [r_FLB(2) r_FLIF(2)], [r_FLB(3) r_FLIF(3)], 'o-', 'C
 plot3([r_FLB(1) r_FLIR(1)], [r_FLB(2) r_FLIR(2)], [r_FLB(3) r_FLIR(3)], 'o-', 'Color', 'red');
 plot3([r_FOT(1) r_FIT(1)], [r_FOT(2) r_FIT(2)], [r_FOT(3) r_FIT(3)], 'o-', 'Color', 'red');
 plot3(r_CP_CH(1), r_CP_CH(2), r_CP_CH(3), 'ro');
-
 
 %% Plot tyre
 

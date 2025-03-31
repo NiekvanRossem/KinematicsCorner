@@ -1,9 +1,9 @@
 %%-----------------------------------------------------------------------%%
-% filename:         Solver.m
+% filename:         DynamicSolver_test.m
 % author(s):        Niek van Rossem
 % Creation date:    23-10-2024
-% Documentation
-% -
+% Documentation:
+%       Test script for the five link solver.
 %%-----------------------------------------------------------------------%%
 
 %% Prepare workspace
@@ -24,7 +24,7 @@ Settings.RelTol = 1e-2;
 Settings.AbsTol = 1e-2;
 Settings.MaxStep = 1;
 Settings.Axle = "Front";
-Settings.Animation = "on";
+Settings.Animation = "off";
 
 %% Load suspension hardpoints
 
@@ -43,11 +43,13 @@ r = vertcat( ...
     PUP.r_P3o, ...
     PUP.r_P4o, ...
     PUP.r_P5o, ...
+    PUP.r_P6o, ...
     PUP.r_P1i, ...
     PUP.r_P2i, ...
     PUP.r_P3i, ...
     PUP.r_P4i, ...
     PUP.r_P5i, ...
+    PUP.r_P6i, ...
     PUP.r_CP_O, ...
     dTravel);
 
@@ -64,11 +66,13 @@ Settings.VariableNames = [
     "r_P3o_x", "r_P3o_y", "r_P3o_z", ...
     "r_P4o_x", "r_P4o_y", "r_P4o_z", ...
     "r_P5o_x", "r_P5o_y", "r_P5o_z", ...
+    "r_P6o_x", "r_P6o_y", "r_P6o_z", ...
     "r_P1i_x", "r_P1i_y", "r_P1i_z", ...
     "r_P2i_x", "r_P2i_y", "r_P2i_z", ...
     "r_P3i_x", "r_P3i_y", "r_P3i_z", ...
     "r_P4i_x", "r_P4i_y", "r_P4i_z", ...
     "r_P5i_x", "r_P5i_y", "r_P5i_z", ...
+    "r_P6i_x", "r_P6i_y", "r_P6i_z", ...
     "r_CP_O_x", "r_CP_O_y", "r_CP_O_z", ...
     "dTravel"];
 
@@ -124,6 +128,27 @@ output.RollSteer    = 180/pi*output.dToe./output.dRoll;                      % d
 % integrate to find camber and toe curves
 output.Camber = cumtrapz(output.t, -output.dCamber*180/pi);
 output.Toe    = cumtrapz(output.t, output.dToe*180/pi);
+
+% damper length
+temp = sqrt((output.r_P6o_x - output.r_P6i_x).^2 ...
+    + (output.r_P6o_y - output.r_P6i_y).^2 ...
+    + (output.r_P6o_z - output.r_P6i_z).^2);
+
+% damper travel
+output.DamperTravel = temp(1) - temp;
+clear temp;
+
+% displacement based motion ratio
+for n = 1:length(output.t)
+    if n == 1
+        output.MR1(n) = nan;
+    else
+        output.MR1(n) = (output.DamperTravel(n) -output.DamperTravel(n-1)) ./ (output.Travel(n) - output.Travel(n-1));
+    end
+    if abs(output.MR1(n)) > 10 || abs(output.MR1(n)) < 0.05
+        output.MR1(n) = nan;
+    end
+end
 
 %% Plot output characteristics
 
@@ -219,12 +244,13 @@ subplot(1,2,2); hold all; box on; grid minor;
 
 if Settings.Animation == "on"
     
-    % initialise outer PUP locations (only works with DWB for now)
+    % initialise outer PUP locations
     Animation.new_P1o = [output.r_P1o_x(1), output.r_P1o_y(1), output.r_P1o_z(1)];
     Animation.new_P2o = [output.r_P2o_x(1), output.r_P2o_y(1), output.r_P2o_z(1)];
     Animation.new_P3o = [output.r_P3o_x(1), output.r_P3o_y(1), output.r_P3o_z(1)];
     Animation.new_P4o = [output.r_P4o_x(1), output.r_P4o_y(1), output.r_P4o_z(1)];
     Animation.new_P5o = [output.r_P5o_x(1), output.r_P5o_y(1), output.r_P5o_z(1)];
+    Animation.new_P6o = [output.r_P6o_x(1), output.r_P6o_y(1), output.r_P6o_z(1)];
     Animation.new_CP_O = [output.r_CP_O_x(1), output.r_CP_O_y(1), output.r_CP_O_z(1)];
     
     % initialise figure
@@ -239,9 +265,10 @@ if Settings.Animation == "on"
     Animation.h3 = plot3([Animation.new_P3o(1) PUP.r_P3i(1)], [Animation.new_P3o(2) PUP.r_P3i(2)], [Animation.new_P3o(3) PUP.r_P3i(3)], 'o-', 'Color', 'red');
     Animation.h4 = plot3([Animation.new_P4o(1) PUP.r_P4i(1)], [Animation.new_P4o(2) PUP.r_P4i(2)], [Animation.new_P4o(3) PUP.r_P4i(3)], 'o-', 'Color', 'red');
     Animation.h5 = plot3([Animation.new_P5o(1) PUP.r_P5i(1)], [Animation.new_P5o(2) PUP.r_P5i(2)], [Animation.new_P5o(3) PUP.r_P5i(3)], 'o-', 'Color', 'red');
-    
+    Animation.h6 = plot3([Animation.new_P6o(1) PUP.r_P6i(1)], [Animation.new_P6o(2) PUP.r_P6i(2)], [Animation.new_P6o(3) PUP.r_P6i(3)], 'o-', 'Color', 'red');
+
     % plot tyre contact patch
-    Animation.h6 = plot3(Animation.new_CP_O(1), Animation.new_CP_O(2), Animation.new_CP_O(3), 'ro');
+    Animation.h7 = plot3(Animation.new_CP_O(1), Animation.new_CP_O(2), Animation.new_CP_O(3), 'ro');
     
     % update data in figure
     for n = 1:length(output.t)
@@ -252,6 +279,7 @@ if Settings.Animation == "on"
         Animation.new_P3o = [output.r_P3o_x(n), output.r_P3o_y(n), output.r_P3o_z(n)];
         Animation.new_P4o = [output.r_P4o_x(n), output.r_P4o_y(n), output.r_P4o_z(n)];
         Animation.new_P5o = [output.r_P5o_x(n), output.r_P5o_y(n), output.r_P5o_z(n)];
+        Animation.new_P6o = [output.r_P6o_x(n), output.r_P6o_y(n), output.r_P6o_z(n)];
         Animation.new_CP_O = [output.r_CP_O_x(n), output.r_CP_O_y(n), output.r_CP_O_z(n)];
     
         % update data
@@ -260,7 +288,8 @@ if Settings.Animation == "on"
         set(Animation.h3, 'XData', [Animation.new_P3o(1) PUP.r_P3i(1)], 'YData', [Animation.new_P3o(2) PUP.r_P3i(2)], 'ZData', [Animation.new_P3o(3) PUP.r_P3i(3)]);
         set(Animation.h4, 'XData', [Animation.new_P4o(1) PUP.r_P4i(1)], 'YData', [Animation.new_P4o(2) PUP.r_P4i(2)], 'ZData', [Animation.new_P4o(3) PUP.r_P4i(3)]);
         set(Animation.h5, 'XData', [Animation.new_P5o(1) PUP.r_P5i(1)], 'YData', [Animation.new_P5o(2) PUP.r_P5i(2)], 'ZData', [Animation.new_P5o(3) PUP.r_P5i(3)]);
-        set(Animation.h6, 'XData', Animation.new_CP_O(1), 'YData', Animation.new_CP_O(2), 'ZData', Animation.new_CP_O(3));
+        set(Animation.h6, 'XData', [Animation.new_P6o(1) PUP.r_P6i(1)], 'YData', [Animation.new_P6o(2) PUP.r_P6i(2)], 'ZData', [Animation.new_P6o(3) PUP.r_P6i(3)]);
+        set(Animation.h7, 'XData', Animation.new_CP_O(1), 'YData', Animation.new_CP_O(2), 'ZData', Animation.new_CP_O(3));
 
         % hold for some time for correct animation speed
         pause(Settings.MaxStep/1e2);

@@ -16,7 +16,7 @@ Settings.Axle = "Front";
 Car.RL = abs(PUP.r_WC_O(3) - PUP.r_CP_O(3));
 
 % Force and moment vectors
-F_CP = [   0.000; -1909.030;  1727.530];   % N
+F_CP = [   0.000;     0.000;     1.000];   % N
 M_CP = [   0.000;     0.000;     0.000];   % Nm
 
 %%
